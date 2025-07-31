@@ -1,0 +1,5 @@
+torch==2.0.1
+transformers==4.49.0
+peft==0.4.0
+bitsandbytes==0.39.0
+accelerate==0.22.0

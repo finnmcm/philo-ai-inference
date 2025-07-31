@@ -1,0 +1,24 @@
+# runpod.yaml
+name: llama-7b-lora
+type: python
+version: "1.0"
+build:
+  context: .
+  dockerfile: Dockerfile
+
+# entrypoint = your model_fn in inference.py
+entrypoint: inference.py
+
+# expose HTTP on /predict
+routes:
+  - path: /
+    methods: ["POST"]
+
+# environment variables
+env:
+  HUGGINGFACE_API_TOKEN: "{{HUGGINGFACE_API_TOKEN}}"  # set in Runpod UI
+
+# choose the cheapest Serverless GPU (A10G)
+resources:
+  gpu:
+    type: a10g-serverless
