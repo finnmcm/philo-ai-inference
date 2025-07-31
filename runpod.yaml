@@ -11,7 +11,7 @@ entrypoint: inference.py
 
 # expose HTTP on /predict
 routes:
-  - path: /
+  - path: /run
     methods: ["POST"]
 
 # environment variables
