@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir \
     bitsandbytes==0.39.0 \
     accelerate==0.22.0
 COPY handler.py .
-COPY model-inference.tar.gz .
+COPY model-inference.tar .
 RUN mkdir /model && tar -xzf model-inference.tar -C /model
 ENV MODEL_DIR=/model HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
 CMD ["python", "-u", "handler.py"]
