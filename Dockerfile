@@ -9,11 +9,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 3) Copy inference code & adapter bundle
 COPY inference.py .
-COPY model-inference.tar.gz .
+COPY model-inference.tar .
 
 # 4) Extract adapter files
 RUN mkdir /model && \
-    tar -xzf model-inference.tar.gz -C /model
+    tar -xzf model-inference.tar -C /model
 
 # 5) Precache base model & tokenizer in 8-bit
 RUN python - <<EOF
