@@ -5,8 +5,8 @@ WORKDIR /app
 
 # 1) Install Python dependencies, including SentencePiece
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir sentencepiece
+RUN pip install --no-cache-dir -r requirements.txt
+
 
 # 2) Copy your inference code & adapter bundle
 COPY inference.py .

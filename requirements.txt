@@ -5,3 +5,4 @@ accelerate==0.22.0
 numpy<2.0
 scipy>=1.10.1
 bitsandbytes-cuda117==0.26.0.post2
+sentencepiece>=0.1.99  
