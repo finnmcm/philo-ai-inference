@@ -2,7 +2,20 @@ import os
 import json
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+import logging
 from peft import PeftModel
+
+# Configure logging for debug visibility
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Map exception hook to log uncaught exceptions
+import sys, traceback
+
+def handle_uncaught_exception(exc_type, exc_value, exc_tb):
+    logger.error("Uncaught exception:", exc_info=(exc_type, exc_value, exc_tb))
+
+sys.excepthook = handle_uncaught_exception
 
 def model_fn(model_dir):
     """
