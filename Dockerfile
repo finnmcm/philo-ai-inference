@@ -1,43 +1,33 @@
-# Use Runpod’s public Serverless Python base image
+# 1) Base image (public, CPU build / GPU runtime)
 FROM runpod/serverless-hello-world:latest
 
 WORKDIR /app
 
-# 1) Install Python dependencies, including SentencePiece
+# 2) Install all Python deps in one go
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-
-# 2) Copy your inference code & adapter bundle
+# 3) Copy your inference code & adapter bundle
 COPY inference.py .
 COPY model-inference.tar .
 
-# 3) Extract adapter files into /model
+# 4) Extract adapter files into /model
 RUN mkdir /model \
  && tar -xzf model-inference.tar -C /model
 
-# 4) Pre-download & cache the base model & tokenizer (now with SentencePiece available)
+# 5) Pre-cache the tokenizer (lightweight)
 RUN python - <<EOF
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from transformers import BitsAndBytesConfig
-# cache_dir="/model/base"
+from transformers import AutoTokenizer
 AutoTokenizer.from_pretrained(
     "huggyllama/llama-7b",
     cache_dir="/model/base",
     use_fast=False
 )
-bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-AutoModelForCausalLM.from_pretrained(
-    "huggyllama/llama-7b",
-    cache_dir="/model/base",
-    quantization_config=bnb_config,
-    device_map="auto"
-)
 EOF
 
-# 5) Point inference.py at the right directories & secrets
+# 6) Point your code at the model dir & secrets
 ENV MODEL_DIR=/model \
     HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
 
-# 6) Launch your inference script
+# 7) Launch your inference script
 CMD ["python", "-u", "inference.py"]
