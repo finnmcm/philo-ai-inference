@@ -17,6 +17,7 @@ routes:
 # environment variables
 env:
   HUGGINGFACE_API_TOKEN: "{{HUGGINGFACE_API_TOKEN}}"  # set in Runpod UI
+  HUGGINGFACE_HUB_TOKEN: "{{HUGGINGFACE_API_TOKEN}}"
 
 # choose the cheapest Serverless GPU (A10G)
 resources:

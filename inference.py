@@ -1,4 +1,3 @@
-# inference.py
 import os
 import json
 import torch
@@ -7,18 +6,41 @@ from peft import PeftModel
 
 def model_fn(model_dir):
     """
-    Load base model + apply LoRA adapter.
+    Load base model + apply LoRA adapter, using pre-cached base if available.
     """
-    # 1) Load tokenizer & base model from HF Hub
-    tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False)
-    base_model = AutoModelForCausalLM.from_pretrained(
-        "huggyllama/llama-7b",
-        load_in_8bit=True,
+    # fetch Hugging Face token if needed
+    hf_token = os.environ.get("HUGGINGFACE_API_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+
+    # determine cache path for base model
+    cache_base = os.path.join(model_dir, "base")
+    if os.path.isdir(cache_base):
+        # load from local cache
+        tokenizer = AutoTokenizer.from_pretrained(cache_base, use_fast=False)
+        base_model = AutoModelForCausalLM.from_pretrained(
+            cache_base,
+            load_in_8bit=True,
+            device_map="auto"
+        )
+    else:
+        # fallback to HF Hub
+        tokenizer = AutoTokenizer.from_pretrained(
+            "huggyllama/llama-7b",
+            use_fast=False,
+            use_auth_token=hf_token
+        )
+        base_model = AutoModelForCausalLM.from_pretrained(
+            "huggyllama/llama-7b",
+            load_in_8bit=True,
+            device_map="auto",
+            use_auth_token=hf_token
+        )
+
+    # apply LoRA adapter
+    model = PeftModel.from_pretrained(
+        base_model,
+        model_dir,
         device_map="auto"
     )
-
-    # 2) Load LoRA adapter from model_dir
-    model = PeftModel.from_pretrained(base_model, model_dir, device_map="auto")
     model.eval()
 
     return {"model": model, "tokenizer": tokenizer}
@@ -50,6 +72,7 @@ def predict_fn(input_data, model_and_tokenizer):
         "top_p": params.get("top_p", 1.0),
         "do_sample": params.get("do_sample", True),
     }
+
     with torch.no_grad():
         output_ids = model.generate(**inputs, **gen_kwargs)
     text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
