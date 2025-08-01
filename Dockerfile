@@ -1,24 +1,24 @@
-# 1) Base image (public, GPU‐enabled runtime)
+# Use Runpod’s public Serverless Python base image
 FROM runpod/serverless-hello-world:latest
 
 WORKDIR /app
 
-# 2) Install Python dependencies (with scipy, numpy<2, GPU bitsandbytes)
+# 1) Install Python dependencies (now using bitsandbytes-cuda117==0.26.0.post2)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3) Copy inference code & adapter bundle
+# 2) Copy your inference code & adapter bundle
 COPY inference.py .
 COPY model-inference.tar .
 
-# 4) Extract adapter files
-RUN mkdir /model && \
-    tar -xzf model-inference.tar -C /model
+# 3) Extract adapter files into /model
+RUN mkdir /model \
+ && tar -xzf model-inference.tar -C /model
 
-# 5) Precache base model & tokenizer in 8-bit
+# 4) Pre-download & cache the base model into /model/base
 RUN python - <<EOF
 from transformers import AutoTokenizer, AutoModelForCausalLM
-# cache_dir="/model/base"
+
 AutoTokenizer.from_pretrained(
     "huggyllama/llama-7b",
     cache_dir="/model/base",
@@ -32,10 +32,8 @@ AutoModelForCausalLM.from_pretrained(
 )
 EOF
 
-# 6) Point inference.py at the right dirs & secrets
-ENV MODEL_DIR=/model \
-    HF_HOME=/model/base \
-    HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
+# 5) Tell your code where to find the adapter and base model
+ENV MODEL_DIR=/model
 
-# 7) Launch
+# 6) Launch your inference script
 CMD ["python", "-u", "inference.py"]
