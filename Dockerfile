@@ -19,16 +19,18 @@ RUN mkdir /model \
 # 4) Pre-download & cache the base model & tokenizer (now with SentencePiece available)
 RUN python - <<EOF
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import BitsAndBytesConfig
 # cache_dir="/model/base"
 AutoTokenizer.from_pretrained(
     "huggyllama/llama-7b",
     cache_dir="/model/base",
     use_fast=False
 )
+bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 AutoModelForCausalLM.from_pretrained(
     "huggyllama/llama-7b",
     cache_dir="/model/base",
-    load_in_8bit=True,
+    quantization_config=bnb_config,
     device_map="auto"
 )
 EOF
