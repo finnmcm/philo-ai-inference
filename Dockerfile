@@ -12,4 +12,4 @@ COPY inference.py .
 COPY model-inference.tar .
 RUN mkdir /model && tar -xzf model-inference.tar -C /model
 ENV MODEL_DIR=/model HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
-CMD ["python", "-u", "handler.py"]
+CMD ["python", "-u", "inference.py"]
