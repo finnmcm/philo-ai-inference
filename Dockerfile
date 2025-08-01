@@ -10,11 +10,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 2) Copy your inference code & adapter bundle
 COPY inference.py .
-COPY model-inference.tar.gz .
+COPY model-inference.tar .
 
 # 3) Extract adapter files into /model
 RUN mkdir /model \
- && tar -xzf model-inference.tar.gz -C /model
+ && tar -xzf model-inference.tar -C /model
 
 # 4) Pre-download & cache the base model & tokenizer (now with SentencePiece available)
 RUN python - <<EOF
