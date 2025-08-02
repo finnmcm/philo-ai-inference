@@ -1,38 +1,40 @@
-# Stage 1: download & quantize the base model
+# ─── Stage 1: download & quantize the base model ───
 FROM python:3.11-slim AS builder
 
 WORKDIR /tmp/base
 
-# install just what we need for pulling the base model
+# 1) Copy the downloader
 COPY download_base.py .
+
+# 2) Install transformers + a new bitsandbytes, then run the script
 RUN pip install --no-cache-dir \
       transformers==4.49.0 \
-      bitsandbytes==0.37.0 \
       peft==0.4.0 \
-      sentencepiece>=0.1.99
-RUN python download_base.py
+      sentencepiece>=0.1.99 \
+      bitsandbytes       && \
+    python download_base.py
 
-# Stage 2: the Runpod serverless image
+# ─── Stage 2: your Runpod serverless image ─────────
 FROM runpod/serverless-hello-world:latest
 
 WORKDIR /app
 
-# copy in the pre-downloaded base
+# 1) Bring in the pre-quantized base model
 COPY --from=builder /tmp/base /model/base
 
-# install runtime deps, pin bitsandbytes <0.39 and remove any stray triton
+# 2) Install your runtime deps (pin bnb back to 0.37 to avoid Triton issues)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
  && pip uninstall -y triton || true
 
-# your inference code + LoRA adapter
+# 3) Copy your inference code & LoRA adapter
 COPY inference.py model-inference.tar .
 RUN mkdir /model/lora \
  && tar -xzf model-inference.tar -C /model/lora
 
+# 4) Point your code at the two model dirs
 ENV BASE_MODEL_PATH=/model/base \
     MODEL_DIR=/model/lora \
-    HF_MODEL_ID="huggyllama/llama-7b" \
-    HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_API_TOKEN}"
+    HF_MODEL_ID="huggyllama/llama-7b"
 
 CMD ["python", "-u", "inference.py"]
