@@ -1,100 +1,90 @@
 import os
 import json
+import logging
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-import logging
 from peft import PeftModel
+import runpod
+from runpod.serverless import start
 
-# Configure logging for debug visibility
+# ——————— CONFIGURE LOGGING ———————
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Map exception hook to log uncaught exceptions
-import sys, traceback
+# ——————— COLD START: LOAD TOKENIZER & MODEL ———————
+MODEL_DIR   = os.environ.get("MODEL_DIR", "/model")
+HF_MODEL_ID = os.environ.get("HF_MODEL_ID", "huggyllama/llama-7b")
 
-def handle_uncaught_exception(exc_type, exc_value, exc_tb):
-    logger.error("Uncaught exception:", exc_info=(exc_type, exc_value, exc_tb))
+logger.info(f"Loading tokenizer from '{HF_MODEL_ID}'…")
+tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_ID, use_fast=False)
 
-sys.excepthook = handle_uncaught_exception
+logger.info(f"Loading base model '{HF_MODEL_ID}' (8-bit) on device_map='auto'…")
+base_model = AutoModelForCausalLM.from_pretrained(
+    HF_MODEL_ID,
+    load_in_8bit=True,
+    device_map="auto"
+)
 
-def model_fn(model_dir):
+logger.info(f"Applying LoRA adapter from '{MODEL_DIR}'…")
+model = PeftModel.from_pretrained(
+    base_model,
+    MODEL_DIR,
+    device_map="auto"
+)
+model.eval()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+logger.info(f"Model loaded and ready on {device}")
+
+# ——————— DEFAULT GENERATION PARAMETERS ———————
+GEN_KWARGS = {
+    "max_new_tokens": 128,
+    "temperature":   0.7,
+    "top_p":         0.95,
+    "do_sample":     True,
+}
+
+# ——————— HANDLER ———————
+def handler(event):
     """
-    Load base model + apply LoRA adapter, using pre-cached base if available.
+    event: dict parsed from the incoming JSON body.
+    Expects either event["body"] (a JSON string) or event["inputs"] directly.
     """
-    # fetch Hugging Face token if needed
-    hf_token = os.environ.get("HUGGINGFACE_API_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
-
-    # determine cache path for base model
-    cache_base = os.path.join(model_dir, "base")
-    if os.path.isdir(cache_base):
-        # load from local cache
-        tokenizer = AutoTokenizer.from_pretrained(cache_base, use_fast=False)
-        base_model = AutoModelForCausalLM.from_pretrained(
-            cache_base,
-            load_in_8bit=True,
-            device_map="auto"
+    try:
+        # 1) Parse JSON body
+        payload = (
+            json.loads(event["body"])
+            if isinstance(event.get("body"), str)
+            else event
         )
-    else:
-        # fallback to HF Hub
-        tokenizer = AutoTokenizer.from_pretrained(
-            "huggyllama/llama-7b",
-            use_fast=False,
-            use_auth_token=hf_token
-        )
-        base_model = AutoModelForCausalLM.from_pretrained(
-            "huggyllama/llama-7b",
-            load_in_8bit=True,
-            device_map="auto",
-            use_auth_token=hf_token
-        )
+        prompt = payload.get("inputs") or payload.get("prompt")
+        if not prompt:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "No 'inputs' field provided."})
+            }
 
-    # apply LoRA adapter
-    model = PeftModel.from_pretrained(
-        base_model,
-        model_dir,
-        device_map="auto"
-    )
-    model.eval()
+        # 2) Tokenize + generate
+        inputs = tokenizer(prompt, return_tensors="pt").to(device)
+        with torch.no_grad():
+            output_ids = model.generate(**inputs, **GEN_KWARGS)
 
-    return {"model": model, "tokenizer": tokenizer}
+        # 3) Decode and return
+        generated = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"generated_text": generated})
+        }
 
-def input_fn(request_body, request_content_type):
-    """
-    Deserialize the JSON request.
-    Expect {"inputs": "<prompt>", "parameters": {...}}
-    """
-    if request_content_type == "application/json":
-        data = json.loads(request_body)
-        prompt = data.get("inputs") or data.get("prompt")
-        params = data.get("parameters", {})
-        return prompt, params
-    raise ValueError(f"Unsupported content type: {request_content_type}")
+    except Exception as e:
+        logger.exception("Error in handler")
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(e)})
+        }
 
-def predict_fn(input_data, model_and_tokenizer):
-    """
-    Run generation with the loaded model.
-    """
-    prompt, params = input_data
-    tokenizer = model_and_tokenizer["tokenizer"]
-    model = model_and_tokenizer["model"]
-
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    gen_kwargs = {
-        "max_new_tokens": params.get("max_new_tokens", 100),
-        "temperature": params.get("temperature", 1.0),
-        "top_p": params.get("top_p", 1.0),
-        "do_sample": params.get("do_sample", True),
-    }
-
-    with torch.no_grad():
-        output_ids = model.generate(**inputs, **gen_kwargs)
-    text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return text
-
-def output_fn(prediction, response_content_type):
-    """
-    Serialize the generated text to JSON.
-    """
-    if response_content_type == "application/json":
-        return json.dumps({"generated_text": prediction}), "application/json"
-    return prediction, "text/plain"
+# ——————— START THE SERVERLESS LOOP ———————
+if __name__ == "__main__":
+    # This will bind the above `handler` to your /run route
+    start({"handler": handler})
