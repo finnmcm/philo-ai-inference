@@ -22,5 +22,5 @@ env:
 # choose the cheapest Serverless GPU (A10G)
 resources:
   gpu:
-    type: rtx-a6000
+    type: a40
     concurrency: 1

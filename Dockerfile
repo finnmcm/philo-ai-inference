@@ -6,7 +6,8 @@ WORKDIR /app
 
 # 1) Install all Python deps in one go
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && (pip uninstall -y triton || echo "triton not installed")
 
 # 2) Copy your inference code & adapter bundle
 COPY inference.py .
