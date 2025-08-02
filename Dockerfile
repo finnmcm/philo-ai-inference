@@ -1,47 +1,38 @@
-# 1) BUILD STAGE: download & quantize the base model
+# Stage 1: download & quantize the base model
 FROM python:3.11-slim AS builder
 
 WORKDIR /tmp/base
-# install only what’s needed to download & save
+
+# install just what we need for pulling the base model
+COPY download_base.py .
 RUN pip install --no-cache-dir \
       transformers==4.49.0 \
       bitsandbytes==0.37.0 \
       peft==0.4.0 \
       sentencepiece>=0.1.99
+RUN python download_base.py
 
-# download & save the tokenizer + 8-bit model
-RUN python - << 'EOF'
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-bnb = BitsAndBytesConfig(load_in_8bit=True)
-AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False).save_pretrained("./base")
-AutoModelForCausalLM.from_pretrained(
-    "huggyllama/llama-7b",
-    quantization_config=bnb,
-    device_map="cpu"
-).save_pretrained("./base")
-EOF
-
-# 2) FINAL IMAGE: your runpod serverless handler
+# Stage 2: the Runpod serverless image
 FROM runpod/serverless-hello-world:latest
 
 WORKDIR /app
 
-# copy in the pre‐downloaded base model
-COPY --from=builder /tmp/base/base /model/base
+# copy in the pre-downloaded base
+COPY --from=builder /tmp/base /model/base
 
-# install runtime deps, pin bitsandbytes <0.39 to avoid Triton conflicts
+# install runtime deps, pin bitsandbytes <0.39 and remove any stray triton
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
  && pip uninstall -y triton || true
 
-# your code + LoRA adapter
-COPY inference.py .
-COPY model-inference.tar .
+# your inference code + LoRA adapter
+COPY inference.py model-inference.tar .
 RUN mkdir /model/lora \
  && tar -xzf model-inference.tar -C /model/lora
 
-# tell inference.py where to find things
 ENV BASE_MODEL_PATH=/model/base \
-    MODEL_DIR=/model/lora
+    MODEL_DIR=/model/lora \
+    HF_MODEL_ID="huggyllama/llama-7b" \
+    HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_API_TOKEN}"
 
 CMD ["python", "-u", "inference.py"]
