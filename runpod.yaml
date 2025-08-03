@@ -21,7 +21,7 @@ env:
   AWS_ACCESS_KEY_ID:      ${{AWS_ACCESS_KEY_ID}}
   AWS_SECRET_ACCESS_KEY:  ${{AWS_SECRET_ACCESS_KEY}}
   AWS_DEFAULT_REGION:    "us-east-1"
-  MODEL_S3_PATH:          s3://philo-ai/models/llama8bit/pytorch-training-2025-08-03-03-41-44-353/output/model.tar.gz
+  MODEL_S3_PATH:          "s3://philo-ai/models/llama8bit/pytorch-training-2025-08-03-03-41-44-353/output/model.tar.gz"
 
 # choose the cheapest Serverless GPU (A10G)
 resources:
