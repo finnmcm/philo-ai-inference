@@ -1,5 +1,5 @@
 # Use official PyTorch image with CUDA 11.8 support (A40 → CUDA11.8)
-FROM pytorch/pytorch:2.0.1-cuda11.8-cudnn8-runtime
+FROM pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime
 
 WORKDIR /app
 
@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir \
       accelerate>=0.22.0 \
       peft>=0.4.0 \
       awscli
+
 
 # 2) Copy in your code + startup script:
 COPY handler.py download_and_run.sh /app/
