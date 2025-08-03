@@ -13,7 +13,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir \
       runpod \
       transformers==4.49.0 \
-      bitsandbytes-cuda118 \
+      bitsandbytes \
       sentencepiece>=0.1.99 \
       accelerate>=0.22.0 \
       peft>=0.4.0 \
