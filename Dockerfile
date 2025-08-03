@@ -32,4 +32,3 @@ ENV MODEL_S3_PATH=
 
 # 4) On container start, download+extract model, then exec your handler
 ENTRYPOINT ["/app/download_and_run.sh"]
-2
