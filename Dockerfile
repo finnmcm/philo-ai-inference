@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir \
 
 
 # 2) Copy in your code + startup script:
-COPY handler.py download_and_run.sh /app/
+COPY inference.py download_and_run.sh /app/
 RUN chmod +x /app/download_and_run.sh
 
 # 3) Document the expected env vars (supplied via runpod.yaml)
