@@ -25,4 +25,4 @@ aws s3api get-object \
 
 echo "✅ Model extracted into /model"
 echo "🚀 Launching inference handler"
-exec python -u handler.py
+exec python -u inference.py
