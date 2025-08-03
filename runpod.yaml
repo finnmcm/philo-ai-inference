@@ -1,5 +1,5 @@
 # runpod.yaml
-name: llama-7b-lora
+name: llama-4bit-lora
 type: python
 version: "1.0"
 build:
@@ -7,7 +7,7 @@ build:
   dockerfile: Dockerfile
 
 # entrypoint = your model_fn in inference.py
-entrypoint: inference.py
+entrypoint: download_and_run.sh
 
 # expose HTTP on /predict
 routes:

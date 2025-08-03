@@ -1,53 +1,42 @@
 import os
-import json
-import logging
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-import runpod
-from runpod.serverless import start
+from peft import PeftModel
+from runpod import RPOD_LOGGER, server
 
-# ——— Logging ———
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+MODEL_DIR = "/model"
 
-# ——— Load quantized model ———
-MODEL_DIR = os.environ.get("MODEL_DIR", "/model")
-bnb_cfg   = BitsAndBytesConfig(load_in_4bit=True)
+# 1) Set up a 4-bit quant config. We choose NF4 + fp16 compute:
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+    llm_int8_enable_fp32_cpu_offload=True
+)
 
-logger.info(f"Loading tokenizer from {MODEL_DIR}")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, use_fast=False)
-
-logger.info(f"Loading 8-bit model from {MODEL_DIR}")
-model = AutoModelForCausalLM.from_pretrained(
+# 2) Load base + quant
+RPOD_LOGGER.info(f"Loading base model (4-bit) from {MODEL_DIR}…")
+base_model = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR,
-    quantization_config=bnb_cfg,
-    device_map="auto"
+    quantization_config=bnb_config,
+    device_map="auto",
+)
+
+# 3) Attach LoRA weights
+model = PeftModel.from_pretrained(
+    base_model,
+    MODEL_DIR,
+    device_map="auto",
 )
 model.eval()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-logger.info(f"Model ready on {device}")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, use_fast=False)
 
-# ——— Handler ———
-def handler(event):
-    try:
-        payload = json.loads(event["body"]) if isinstance(event.get("body"), str) else event
-        prompt  = payload.get("inputs") or payload.get("prompt")
-        if not prompt:
-            return {"statusCode": 400, "body": json.dumps({"error": "No 'inputs' provided"})}
+def handler(request):
+    prompt = request["prompt"]
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    out = model.generate(**inputs, max_new_tokens=128)
+    return tokenizer.decode(out[0], skip_special_tokens=True)
 
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        with torch.no_grad():
-            out_ids = model.generate(**inputs, max_new_tokens=128, temperature=0.7, top_p=0.95)
-
-        text = tokenizer.decode(out_ids[0], skip_special_tokens=True)
-        return {"statusCode": 200, "body": json.dumps({"generated_text": text})}
-
-    except Exception as e:
-        logger.exception("Inference error")
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
-
-# ——— Start serverless loop ———
 if __name__ == "__main__":
-    start({"handler": handler})
+    server.start({"handler": handler})
